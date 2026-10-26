@@ -1,0 +1,20 @@
+[
+  {
+    "course": "Software Development",
+    "campus": "Johannesburg",
+    "enrolled": 93,
+    "capacity": 193
+  },
+  {
+    "course": "Power BI Analytics",
+    "campus": "Johannesburg",
+    "enrolled": 36,
+    "capacity": 40
+  },
+  {
+    "course": "Cloud Fundamentals",
+    "campus": "Pretoria",
+    "enrolled": 28,
+    "capacity": 40
+  }
+]

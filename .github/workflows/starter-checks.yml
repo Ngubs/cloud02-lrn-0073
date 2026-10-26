@@ -1,0 +1,92 @@
+name: Build and deploy assigned app
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assigned-app-main
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out application
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build if available
+        run: npm run build --if-present
+
+      - name: Run required tests
+        run: npm test
+
+      - name: Prepare deployment package
+        if: vars.FMTALI_DEPLOYMENT_ENABLED == 'true'
+        run: |
+          npm prune --omit=dev
+          zip -qr "$RUNNER_TEMP/app.zip" . \
+            -x ".git/*" ".github/*" "tests/*"
+
+      - name: Upload deployment package
+        if: vars.FMTALI_DEPLOYMENT_ENABLED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: ${{ runner.temp }}/app.zip
+          retention-days: 1
+          compression-level: 0
+
+  deploy:
+    if: vars.FMTALI_DEPLOYMENT_ENABLED == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download deployment package
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-package
+
+      - name: Sign into assigned Azure identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check assigned app exists
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+        run: |
+          az webapp show \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$WEBAPP_NAME" \
+            --query name --output tsv
+
+      - name: Deploy to assigned app
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: app.zip
